@@ -42,6 +42,7 @@ class FourInARowService(game_grpc.FourInARowServiceServicer):
     nextGameId = 0
 
     def NewGame(self, request: game_pb.FourInARow.NewGameReq, context):
+        logging.info("NewGame")
         gameId = FourInARowService.nextGameId
         FourInARowService.nextGameId += 1
 
@@ -53,6 +54,7 @@ class FourInARowService(game_grpc.FourInARowServiceServicer):
 
     def GetMoves(self, request: game_pb.FourInARow.Game, context):
         gameId = request.id
+        logging.info("GetMoves(%s)", gameId)
         game = FourInARowService.games[gameId]
         moveList = game_pb.FourInARow.MoveList()
         moveList.moves.extend([
@@ -64,6 +66,9 @@ class FourInARowService(game_grpc.FourInARowServiceServicer):
     def MakeMove(self, request: game_pb.FourInARow.MakeMoveReq, context):
         gameId = request.game.id
         move = request.move
+        logging.info(
+                "MakeMoves(%s, {row: %s, col: %s})",
+                gameId, move.row, move.col)
         FourInARowService.games[gameId].makeMove(move.col)
         return game_pb.FourInARow.Empty()
 
@@ -74,10 +79,12 @@ def serve():
         FourInARowService(), server)
     server.add_insecure_port('[::]:50051')
     server.start()
+    logging.info("Server started")
     server.wait_for_termination()
 
-
 if __name__ == '__main__':
-    logging.basicConfig()
+    logging.basicConfig(
+        format="%(levelname)s:%(asctime)s %(filename)s:%(lineno)d|%(message)s",
+        level=logging.INFO)
     serve()
 
