@@ -1,0 +1,27 @@
+package(default_visibility = ["//visibility:public"])
+
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_cc//cc:defs.bzl", "cc_proto_library")
+load("@com_github_grpc_grpc//bazel:python_rules.bzl", "py_grpc_library", "py_proto_library")
+
+proto_library(
+    name = "game_proto",
+    srcs = ["game.proto"],
+)
+
+cc_proto_library(
+    name = "game_cc_proto",
+    deps = [":game_proto"],
+)
+
+py_proto_library(
+    name = "game_py_proto",
+    deps = [":game_proto"],
+)
+
+py_grpc_library(
+    name = "game_py_grpc",
+    srcs = [":game_proto"],
+    deps = [":game_py_proto"],
+)
+
