@@ -2,13 +2,13 @@ syntax = "proto3";
 
 package game;
 
-service FourInARowService {
-  rpc NewGame(FourInARow.NewGameReq) returns (FourInARow.Game) {}
-  rpc GetMoves(FourInARow.Game) returns (FourInARow.MoveList) {}
-  rpc MakeMove(FourInARow.MakeMoveReq) returns (FourInARow.Empty) {}
+service Connect4Service {
+  rpc NewGame(Connect4.NewGameReq) returns (Connect4.Game) {}
+  rpc GetMoves(Connect4.Game) returns (Connect4.MoveList) {}
+  rpc MakeMove(Connect4.MakeMoveReq) returns (Connect4.Empty) {}
 }
 
-message FourInARow {
+message Connect4 {
   message Empty {}
 
   message Game {

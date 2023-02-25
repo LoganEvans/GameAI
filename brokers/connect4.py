@@ -9,7 +9,7 @@ import proto.game_pb2_grpc as game_grpc
 import time
 
 
-class FourInARow:
+class Connect4:
     urlTemplate = (
             "https://waywardtrends.com/bryan/FourInARow/Main.html"
             "?cpu={cpuPlayer}&diff={difficulty}")
@@ -18,7 +18,7 @@ class FourInARow:
         self.browser = Browser("chrome")
         self.serverPlayer = serverPlayer
         self.difficulty = difficulty
-        url = FourInARow.urlTemplate.format(
+        url = Connect4.urlTemplate.format(
                 cpuPlayer=self.serverPlayer,
                 difficulty=self.difficulty)
         self.browser.visit(url)
@@ -37,46 +37,46 @@ class FourInARow:
                 "moveListContainer").find_by_id("moveList").value.split()[4:]
 
 
-class FourInARowService(game_grpc.FourInARowServiceServicer):
+class Connect4Service(game_grpc.Connect4ServiceServicer):
     games = {}
     nextGameId = 0
 
-    def NewGame(self, request: game_pb.FourInARow.NewGameReq, context):
+    def NewGame(self, request: game_pb.Connect4.NewGameReq, context):
         logging.info("NewGame")
-        gameId = FourInARowService.nextGameId
-        FourInARowService.nextGameId += 1
+        gameId = Connect4Service.nextGameId
+        Connect4Service.nextGameId += 1
 
-        FourInARowService.games[gameId] = FourInARow(
+        Connect4Service.games[gameId] = Connect4(
                 serverPlayer=request.serverPlayer,
                 difficulty=request.difficulty)
 
-        return game_pb.FourInARow.Game(id=gameId)
+        return game_pb.Connect4.Game(id=gameId)
 
-    def GetMoves(self, request: game_pb.FourInARow.Game, context):
+    def GetMoves(self, request: game_pb.Connect4.Game, context):
         gameId = request.id
         logging.info("GetMoves(%s)", gameId)
-        game = FourInARowService.games[gameId]
-        moveList = game_pb.FourInARow.MoveList()
+        game = Connect4Service.games[gameId]
+        moveList = game_pb.Connect4.MoveList()
         moveList.moves.extend([
-                game_pb.FourInARow.Move(row=int(m[1]) - 1,
+                game_pb.Connect4.Move(row=int(m[1]) - 1,
                                         col=ord(m[0]) - ord('a'))
                 for m in game.getMoves()])
         return moveList
 
-    def MakeMove(self, request: game_pb.FourInARow.MakeMoveReq, context):
+    def MakeMove(self, request: game_pb.Connect4.MakeMoveReq, context):
         gameId = request.game.id
         move = request.move
         logging.info(
                 "MakeMoves(%s, {row: %s, col: %s})",
                 gameId, move.row, move.col)
-        FourInARowService.games[gameId].makeMove(move.col)
-        return game_pb.FourInARow.Empty()
+        Connect4Service.games[gameId].makeMove(move.col)
+        return game_pb.Connect4.Empty()
 
 
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    game_grpc.add_FourInARowServiceServicer_to_server(
-        FourInARowService(), server)
+    game_grpc.add_Connect4ServiceServicer_to_server(
+        Connect4Service(), server)
     server.add_insecure_port('[::]:50051')
     server.start()
     logging.info("Server started")

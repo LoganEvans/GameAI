@@ -1,4 +1,4 @@
-#include "ais/fourInARowAI.h"
+#include "ais/connect4AI.h"
 
 #include <unistd.h>
 
@@ -12,42 +12,42 @@
 
 #include "proto/game.grpc.pb.h"
 
-std::unique_ptr<game::FourInARow::Game>
-newGame(game::FourInARowService::Stub *stub, int serverPlayer, int difficulty) {
+std::unique_ptr<game::Connect4::Game>
+newGame(game::Connect4Service::Stub *stub, int serverPlayer, int difficulty) {
   grpc::ClientContext context;
-  auto newGameReq = game::FourInARow::NewGameReq();
+  auto newGameReq = game::Connect4::NewGameReq();
   newGameReq.set_serverplayer(1);
   newGameReq.set_difficulty(3);
-  auto game = std::make_unique<game::FourInARow::Game>();
+  auto game = std::make_unique<game::Connect4::Game>();
   stub->NewGame(&context, newGameReq, game.get());
   return game;
 }
 
-std::unique_ptr<game::FourInARow::Empty>
-makeMove(game::FourInARowService::Stub *stub, game::FourInARow::Game *game,
+std::unique_ptr<game::Connect4::Empty>
+makeMove(game::Connect4Service::Stub *stub, game::Connect4::Game *game,
          int row, int col) {
   grpc::ClientContext context;
-  auto makeMoveReq = game::FourInARow::MakeMoveReq();
+  auto makeMoveReq = game::Connect4::MakeMoveReq();
   *makeMoveReq.mutable_game() = *game;
   auto* move = makeMoveReq.mutable_move();
   move->set_row(row);
   move->set_col(col);
-  auto empty = std::make_unique<game::FourInARow::Empty>();
+  auto empty = std::make_unique<game::Connect4::Empty>();
   stub->MakeMove(&context, makeMoveReq, empty.get());
   return empty;
 }
 
-std::unique_ptr<game::FourInARow::MoveList>
-getMoves(game::FourInARowService::Stub *stub, game::FourInARow::Game* game) {
+std::unique_ptr<game::Connect4::MoveList>
+getMoves(game::Connect4Service::Stub *stub, game::Connect4::Game* game) {
   grpc::ClientContext context;
-  auto moveList = std::make_unique<game::FourInARow::MoveList>();
+  auto moveList = std::make_unique<game::Connect4::MoveList>();
   stub->GetMoves(&context, *game, moveList.get());
   return moveList;
 }
 
-std::unique_ptr<game::FourInARow::MoveList>
-waitForServerMove(game::FourInARowService::Stub *stub,
-                  game::FourInARow::Game *game, int serverPlayer) {
+std::unique_ptr<game::Connect4::MoveList>
+waitForServerMove(game::Connect4Service::Stub *stub,
+                  game::Connect4::Game *game, int serverPlayer) {
   while (true) {
     auto moveList = getMoves(stub, game);
     if (moveList->moves().size() % 2 != serverPlayer) {
@@ -58,7 +58,7 @@ waitForServerMove(game::FourInARowService::Stub *stub,
 }
 
 int main() {
-  auto stub = game::FourInARowService::NewStub(grpc::CreateChannel(
+  auto stub = game::Connect4Service::NewStub(grpc::CreateChannel(
       "localhost:50051", grpc::InsecureChannelCredentials()));
 
   const int aiPlayer = 0;
@@ -66,7 +66,7 @@ int main() {
 
   auto game =
       newGame(stub.get(), /*serverPlayer=*/serverPlayer, /*difficulty=*/3);
-  auto ai = ais::FourInARowAI(/*aiPlayer=*/aiPlayer, /*usecPerMove=*/1000000);
+  auto ai = ais::conn4::AI(/*aiPlayer=*/aiPlayer, /*usecPerMove=*/1000000);
 
   int moveNum = 0;
   while (!ai.gameIsOver()) {

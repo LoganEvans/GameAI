@@ -15,19 +15,19 @@ args = parser.parse_args()
 
 if __name__ == "__main__":
     channel = grpc.insecure_channel("localhost:50051")
-    stub = game_grpc.FourInARowServiceStub(channel)
+    stub = game_grpc.Connect4ServiceStub(channel)
 
     if args.verb == "newGame":
-        print(stub.NewGame(game_pb.FourInARow.NewGameReq(
+        print(stub.NewGame(game_pb.Connect4.NewGameReq(
                 serverPlayer=int(args.serverPlayer),
                 difficulty=int(args.difficulty))))
     elif args.verb == "move":
-        stub.MakeMove(game_pb.FourInARow.MakeMoveReq(
-                game=game_pb.FourInARow.Game(id=int(args.gameId)),
-                move=game_pb.FourInARow.Move(
+        stub.MakeMove(game_pb.Connect4.MakeMoveReq(
+                game=game_pb.Connect4.Game(id=int(args.gameId)),
+                move=game_pb.Connect4.Move(
                     row=int(args.row), col=int(args.col))))
     elif args.verb == "getMoves":
-        print(stub.GetMoves(game_pb.FourInARow.Game(id=int(args.gameId))))
+        print(stub.GetMoves(game_pb.Connect4.Game(id=int(args.gameId))))
     else:
         assert(False)
 
