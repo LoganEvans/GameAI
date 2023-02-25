@@ -1,4 +1,6 @@
-#include "ais/fourInARow.h"
+#include "ais/fourInARowAI.h"
+
+#include <unistd.h>
 
 #include <memory>
 
@@ -22,13 +24,14 @@ newGame(game::FourInARowService::Stub *stub, int serverPlayer, int difficulty) {
 }
 
 std::unique_ptr<game::FourInARow::Empty>
-makeMove(game::FourInARowService::Stub *stub, game::FourInARow::Game* game, int row, int col) {
+makeMove(game::FourInARowService::Stub *stub, game::FourInARow::Game *game,
+         int row, int col) {
   grpc::ClientContext context;
   auto makeMoveReq = game::FourInARow::MakeMoveReq();
   *makeMoveReq.mutable_game() = *game;
   auto* move = makeMoveReq.mutable_move();
-  move->set_row(0);
-  move->set_col(0);
+  move->set_row(row);
+  move->set_col(col);
   auto empty = std::make_unique<game::FourInARow::Empty>();
   stub->MakeMove(&context, makeMoveReq, empty.get());
   return empty;
@@ -42,15 +45,41 @@ getMoves(game::FourInARowService::Stub *stub, game::FourInARow::Game* game) {
   return moveList;
 }
 
-int main() {
-  printf("here: %d\n", ais::fiar::foo());
+std::unique_ptr<game::FourInARow::MoveList>
+waitForServerMove(game::FourInARowService::Stub *stub,
+                  game::FourInARow::Game *game, int serverPlayer) {
+  while (true) {
+    auto moveList = getMoves(stub, game);
+    if (moveList->moves().size() % 2 != serverPlayer) {
+      return moveList;
+    }
+    usleep(100000);
+  }
+}
 
+int main() {
   auto stub = game::FourInARowService::NewStub(grpc::CreateChannel(
       "localhost:50051", grpc::InsecureChannelCredentials()));
 
-  auto game = newGame(stub.get(), 1, 3);
-  makeMove(stub.get(), game.get(), 0, 0);
+  const int aiPlayer = 0;
+  const int serverPlayer = 1;
 
-  printf("end: %s\n", getMoves(stub.get(), game.get()).);
+  auto game =
+      newGame(stub.get(), /*serverPlayer=*/serverPlayer, /*difficulty=*/3);
+  auto ai = ais::FourInARowAI(/*aiPlayer=*/aiPlayer, /*usecPerMove=*/1000000);
+
+  int moveNum = 0;
+  while (!ai.gameIsOver()) {
+    if (moveNum % 2 == serverPlayer) {
+      auto moveList = waitForServerMove(stub.get(), game.get(),
+                                        /*serverPlayer=*/serverPlayer);
+      ai.makeServerMove(moveList->moves()[moveList->moves().size() - 1]);
+    } else {
+      auto move = ai.waitForMove();
+      makeMove(stub.get(), game.get(), move->row(), move->col());
+    }
+    moveNum++;
+  }
+
   return 0;
 }

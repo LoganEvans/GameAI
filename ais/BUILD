@@ -2,8 +2,11 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "fourInARowAI",
-    srcs = ["fourInARow.cpp"],
-    hdrs = ["fourInARow.h"],
+    srcs = ["fourInARowAI.cpp"],
+    hdrs = ["fourInARowAI.h"],
+    deps = [
+        "//proto:game_cc_proto",
+    ],
 )
 
 cc_binary(
