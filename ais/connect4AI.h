@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
+#include <limits>
 
 #include "proto/game.pb.h"
 
@@ -29,6 +31,12 @@ public:
   };
 
   Board() {}
+  Board(const Board &other) : board_(other.board_) {}
+
+  Board &operator=(const Board &other) {
+    board_ = other.board_;
+    return *this;
+  }
 
   // Board Index
   static inline int bIdx(Player player) {
@@ -49,10 +57,30 @@ private:
   std::array<uint64_t, 2> board_{};
 };
 
+class State {
+public:
+  static constexpr uint64_t kCertain = std::numeric_limits<uint64_t>::max();
+
+  Board::Spot pickMove() const;
+
+private:
+  Board board_;
+  Board::Spot lastMove_;
+  Board::Player playerToMove_;
+
+  // Start at 1 win per player based on the sunrise problem
+  std::atomic<uint64_t> heuristicSum_{1};
+  std::atomic<uint64_t> heuristicNumTrials_{2};
+
+  Board::LegalMoves legalMoves_;
+  std::array<std::unique_ptr<State>, Board::kCols> children_;
+};
+
 class AI {
  public:
    AI(int aiPlayer, int usecPerMove)
-       : aiPlayer_(aiPlayer),
+       : aiPlayer_(static_cast<Board::Player>(aiPlayer)),
+         serverPlayer_(static_cast<Board::Player>((aiPlayer + 1) % 2)),
          durationPerMove_(std::chrono::microseconds(usecPerMove)) {}
 
    bool gameIsOver() const;
@@ -62,7 +90,8 @@ class AI {
    void makeServerMove(const game::Connect4::Move& move);
 
  private:
-  const int aiPlayer_;
+  const Board::Player aiPlayer_;
+  const Board::Player serverPlayer_;
   const std::chrono::high_resolution_clock::duration durationPerMove_;
   Board board_;
 };

@@ -8,13 +8,49 @@
 
 namespace ais::conn4 {
 
-TEST(Board, ctor) {
+TEST(Board, defaultCtor) {
   Board b;
 
   for (int row = 0; row < 6; row++) {
     for (int col = 0; col < 7; col++) {
       EXPECT_EQ(b.getPlayer(Board::Spot{.row = row, .col = col}),
                 Board::Player::None);
+    }
+  }
+}
+
+TEST(Board, copyCtor) {
+  Board b;
+
+  b.move(Board::Spot{.row=0, .col=3}, Board::Player::One);
+  b.move(Board::Spot{.row=1, .col=3}, Board::Player::Two);
+  b.move(Board::Spot{.row=0, .col=2}, Board::Player::One);
+
+  Board copy(b);
+
+  for (int row = 0; row < 6; row++) {
+    for (int col = 0; col < 7; col++) {
+      EXPECT_EQ(b.getPlayer(Board::Spot{.row = row, .col = col}),
+                copy.getPlayer(Board::Spot{.row = row, .col = col}));
+    }
+  }
+}
+
+TEST(Board, copyAssignment) {
+  Board b;
+
+  b.move(Board::Spot{.row=0, .col=3}, Board::Player::One);
+  b.move(Board::Spot{.row=1, .col=3}, Board::Player::Two);
+  b.move(Board::Spot{.row=0, .col=2}, Board::Player::One);
+
+  Board copy;
+  copy.move(Board::Spot{.row=0, .col=5}, Board::Player::One);
+  copy = b;
+
+  for (int row = 0; row < 6; row++) {
+    for (int col = 0; col < 7; col++) {
+      EXPECT_EQ(b.getPlayer(Board::Spot{.row = row, .col = col}),
+                copy.getPlayer(Board::Spot{.row = row, .col = col}));
     }
   }
 }

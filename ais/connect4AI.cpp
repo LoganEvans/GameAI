@@ -65,6 +65,22 @@ Board::Player Board::nextPlayer() const {
   return static_cast<Board::Player>(__builtin_popcountll(b) % 2);
 }
 
+Board::Spot State::pickMove() const {
+  auto legalMoves = board_.legalMoves();
+
+  // Check for winning moves
+  for (int col = 0; col < Board::kCols; col++) {
+    auto* child = children_[col].get();
+    if (child && child->heuristicNumTrials_ == kCertain &&
+        (child->heuristicSum_ == kCertain) ==
+            static_cast<bool>(playerToMove_)) {
+      return Board::Spot{.row = legalMoves.legalRowInCol[col], .col = col};
+    }
+  }
+
+  // Pick one of the moves probabalistically
+}
+
 bool AI::gameIsOver() const {
   return board_.winner() != Board::Player::None;
 }
@@ -72,14 +88,25 @@ bool AI::gameIsOver() const {
 std::unique_ptr<game::Connect4::Move> AI::waitForMove() {
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_int_distribution<> dist(0, 6);
+  std::uniform_int_distribution<> colDist(0, 6);
 
   auto move = std::make_unique<game::Connect4::Move>();
-  move->set_col(dist(gen));
 
-  return move;
+  auto legalMoves = board_.legalMoves();
+  while (true) {
+    int col = colDist(gen);
+    if (legalMoves.legalRowInCol[col] != Board::LegalMoves::kIllegal) {
+      move->set_col(col);
+      move->set_row(legalMoves.legalRowInCol[col]);
+      return move;
+    }
+  }
 }
 
-void AI::makeServerMove(const game::Connect4::Move &move) {}
+void AI::makeServerMove(const game::Connect4::Move &move) {
+  board_.move(Board::Spot{.row = static_cast<int32_t>(move.row()),
+                          .col = static_cast<int32_t>(move.col())},
+              serverPlayer_);
+}
 
 } // namespace ais::conn4
