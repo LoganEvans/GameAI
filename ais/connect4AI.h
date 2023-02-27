@@ -2,7 +2,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <limits>
+#include <mutex>
 
 #include "proto/game.pb.h"
 
@@ -31,7 +33,10 @@ public:
   };
 
   Board() {}
+  Board(std::string str);  // For debug use
   Board(const Board &other) : board_(other.board_) {}
+
+  std::string debugString() const;
 
   Board &operator=(const Board &other) {
     board_ = other.board_;
@@ -51,17 +56,37 @@ public:
 
   LegalMoves legalMoves() const;
 
+  bool hasWinningMove(Player player) const;
+
+  Spot getWinningMove(Player player) const;
+
   Player nextPlayer() const;
 
 private:
   std::array<uint64_t, 2> board_{};
 };
 
+inline bool operator==(const Board::Spot &lhs, const Board::Spot &rhs) {
+  return lhs.row == rhs.row and lhs.col == rhs.col;
+}
+
+inline bool operator!=(const Board::Spot &lhs, const Board::Spot &rhs) {
+  return !(lhs == rhs);
+}
+
 class State {
 public:
   static constexpr uint64_t kCertain = std::numeric_limits<uint64_t>::max();
 
   Board::Spot pickMove() const;
+  std::unique_ptr<State> makeMoveAndUpdateState(Board::Spot spot);
+  const Board& board() const { return board_; }
+
+  double winProbability(int col) const;
+
+  void createChild(int col);
+
+  void monteCarloTrial();
 
 private:
   Board board_;
@@ -73,15 +98,22 @@ private:
   std::atomic<uint64_t> heuristicNumTrials_{2};
 
   Board::LegalMoves legalMoves_;
+  State* parent_{nullptr};
+  std::mutex childrenMutex_;
   std::array<std::unique_ptr<State>, Board::kCols> children_;
 };
 
 class AI {
  public:
+   typedef std::chrono::high_resolution_clock Clock;
+
    AI(int aiPlayer, int usecPerMove)
        : aiPlayer_(static_cast<Board::Player>(aiPlayer)),
          serverPlayer_(static_cast<Board::Player>((aiPlayer + 1) % 2)),
-         durationPerMove_(std::chrono::microseconds(usecPerMove)) {}
+         durationPerMove_(std::chrono::microseconds(usecPerMove)),
+         state_(std::make_unique<State>()) {}
+
+   void thinkHard();
 
    bool gameIsOver() const;
 
@@ -92,8 +124,8 @@ class AI {
  private:
   const Board::Player aiPlayer_;
   const Board::Player serverPlayer_;
-  const std::chrono::high_resolution_clock::duration durationPerMove_;
-  Board board_;
+  const Clock::duration durationPerMove_;
+  std::unique_ptr<State> state_;
 };
 
 } // namespace ais::conn4
