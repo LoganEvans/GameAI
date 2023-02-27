@@ -305,4 +305,15 @@ TEST(Board, hasWinningMoveBackwardDiag) {
   EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
 }
 
+TEST(State, monteCarlo) {
+  State state(Board(), Board::Player::One);
+
+  for (int i = 0; i < 2000; i++) {
+    state.monteCarloTrial();
+  }
+
+  EXPECT_GT(state.winProbability(Board::Player::One), 0.0455);
+  EXPECT_LT(state.winProbability(Board::Player::One), 0.9545);
+}
+
 } // namespace ais::conn4

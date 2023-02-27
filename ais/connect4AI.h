@@ -25,6 +25,7 @@ public:
     One = 0,
     Two = 1,
     None = 2,
+    Draw = 3,
   };
 
   struct LegalMoves {
@@ -48,6 +49,10 @@ public:
     return static_cast<int>(player);
   }
 
+  static inline Player other(Player player) {
+    return (player == Player::One) ? Player::Two : Player::One;
+  }
+
   Player getPlayer(Spot spot) const;
 
   void move(Spot spot, Player player);
@@ -62,8 +67,8 @@ public:
 
   Player nextPlayer() const;
 
-private:
   std::array<uint64_t, 2> board_{};
+private:
 };
 
 inline bool operator==(const Board::Spot &lhs, const Board::Spot &rhs) {
@@ -78,19 +83,37 @@ class State {
 public:
   static constexpr uint64_t kCertain = std::numeric_limits<uint64_t>::max();
 
+  State() = delete;
+  State(Board board, Board::Player playerToMove)
+      : board_(board), playerToMove_(playerToMove) {}
+
   Board::Spot pickMove() const;
   std::unique_ptr<State> makeMoveAndUpdateState(Board::Spot spot);
+
   const Board& board() const { return board_; }
 
-  double winProbability(int col) const;
+  Board::Player playerToMove() const { return playerToMove_; }
 
-  void createChild(int col);
+  bool hasChildren() const { return hasChildren_; }
+
+  int heuristicNumTrials() const {
+    return heuristicNumTrials_.load(std::memory_order_relaxed);
+  }
+
+  double winProbability(Board::Player player) const;
+
+  void updateProbabilities();
+
+  void markSolved(Board::Player winningPlayer);
+
+  void createChildren();
+
+  State *getChild(int col) const { return children_[col].get(); }
 
   void monteCarloTrial();
 
 private:
   Board board_;
-  Board::Spot lastMove_;
   Board::Player playerToMove_;
 
   // Start at 1 win per player based on the sunrise problem
@@ -99,7 +122,9 @@ private:
 
   Board::LegalMoves legalMoves_;
   State* parent_{nullptr};
+  bool hasChildren_{false};
   std::mutex childrenMutex_;
+  std::atomic<double> minMaxWinProb_{0.0};
   std::array<std::unique_ptr<State>, Board::kCols> children_;
 };
 
@@ -111,7 +136,7 @@ class AI {
        : aiPlayer_(static_cast<Board::Player>(aiPlayer)),
          serverPlayer_(static_cast<Board::Player>((aiPlayer + 1) % 2)),
          durationPerMove_(std::chrono::microseconds(usecPerMove)),
-         state_(std::make_unique<State>()) {}
+         state_(std::make_unique<State>(Board(), Board::Player::One)) {}
 
    void thinkHard();
 
@@ -122,6 +147,8 @@ class AI {
    void makeServerMove(const game::Connect4::Move& move);
 
  private:
+  static constexpr uint64_t kMonteCarloThreshold = 1000;
+
   const Board::Player aiPlayer_;
   const Board::Player serverPlayer_;
   const Clock::duration durationPerMove_;
