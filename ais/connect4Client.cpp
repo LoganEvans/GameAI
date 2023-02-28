@@ -66,7 +66,7 @@ int main() {
 
   auto game =
       newGame(stub.get(), /*serverPlayer=*/serverPlayer, /*difficulty=*/3);
-  auto ai = ais::conn4::AI(/*aiPlayer=*/aiPlayer, /*usecPerMove=*/10000000);
+  auto ai = ais::conn4::AI(/*aiPlayer=*/aiPlayer, /*usecPerMove=*/1000000);
 
   int moveNum = 0;
   while (!ai.gameIsOver()) {

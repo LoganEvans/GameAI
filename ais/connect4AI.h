@@ -67,6 +67,8 @@ public:
 
   Player nextPlayer() const;
 
+  bool boardIsLegal() const;
+
   std::array<uint64_t, 2> board_{};
 private:
 };
@@ -85,7 +87,8 @@ public:
 
   State() = delete;
   State(Board board, Board::Player playerToMove)
-      : board_(board), playerToMove_(playerToMove) {}
+      : board_(board), playerToMove_(playerToMove),
+        legalMoves_(board_.legalMoves()) {}
 
   Board::Spot pickMove() const;
   std::unique_ptr<State> makeMoveAndUpdateState(Board::Spot spot);
@@ -101,6 +104,8 @@ public:
   }
 
   double winProbability(Board::Player player) const;
+
+  void setWinProbability(Board::Player winner, double probablity);
 
   void updateProbabilities();
 
@@ -124,7 +129,7 @@ private:
   State* parent_{nullptr};
   bool hasChildren_{false};
   std::mutex childrenMutex_;
-  std::atomic<double> minMaxWinProb_{0.0};
+  std::atomic<double> minMaxWinProb_{0.5};
   std::array<std::unique_ptr<State>, Board::kCols> children_;
 };
 

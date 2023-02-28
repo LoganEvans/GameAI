@@ -305,6 +305,14 @@ TEST(Board, hasWinningMoveBackwardDiag) {
   EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
 }
 
+TEST(State, foo) {
+  Board b;
+  b.board_ = 
+  {134217728, 0}
+  ;
+  printf("%s\n", b.debugString().c_str());
+}
+
 TEST(State, monteCarlo) {
   State state(Board(), Board::Player::One);
 
