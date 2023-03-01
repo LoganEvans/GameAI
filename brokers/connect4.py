@@ -12,7 +12,7 @@ import time
 class Connect4:
     urlTemplate = (
             "https://waywardtrends.com/bryan/FourInARow/Main.html"
-            "?cpu={cpuPlayer}&diff={difficulty}")
+            "?cpu=1&diff={difficulty}")
 
     def __init__(self, serverPlayer=1, difficulty=3):
         self.browser = Browser("chrome")
@@ -21,6 +21,8 @@ class Connect4:
         url = Connect4.urlTemplate.format(
                 cpuPlayer=self.serverPlayer,
                 difficulty=self.difficulty)
+        if serverPlayer == 0:
+            url += "&humancolor=b"
         self.browser.visit(url)
 
     def updateMoves(self):
@@ -42,7 +44,8 @@ class Connect4Service(game_grpc.Connect4ServiceServicer):
     nextGameId = 0
 
     def NewGame(self, request: game_pb.Connect4.NewGameReq, context):
-        logging.info("NewGame")
+        logging.info("NewGame(serverPlayer=%s, difficulty=%s)",
+                     request.serverPlayer, request.difficulty)
         gameId = Connect4Service.nextGameId
         Connect4Service.nextGameId += 1
 

@@ -16,8 +16,8 @@ std::unique_ptr<game::Connect4::Game>
 newGame(game::Connect4Service::Stub *stub, int serverPlayer, int difficulty) {
   grpc::ClientContext context;
   auto newGameReq = game::Connect4::NewGameReq();
-  newGameReq.set_serverplayer(1);
-  newGameReq.set_difficulty(3);
+  newGameReq.set_serverplayer(serverPlayer);
+  newGameReq.set_difficulty(difficulty);
   auto game = std::make_unique<game::Connect4::Game>();
   stub->NewGame(&context, newGameReq, game.get());
   return game;
@@ -61,12 +61,12 @@ int main() {
   auto stub = game::Connect4Service::NewStub(grpc::CreateChannel(
       "localhost:50051", grpc::InsecureChannelCredentials()));
 
-  const int aiPlayer = 0;
-  const int serverPlayer = 1;
+  const int aiPlayer = 1;
+  const int serverPlayer = 0;
 
   auto game =
-      newGame(stub.get(), /*serverPlayer=*/serverPlayer, /*difficulty=*/3);
-  auto ai = ais::conn4::AI(/*aiPlayer=*/aiPlayer, /*usecPerMove=*/1000000);
+      newGame(stub.get(), /*serverPlayer=*/serverPlayer, /*difficulty=*/5);
+  auto ai = ais::conn4::AI(/*aiPlayer=*/aiPlayer, /*usecPerMove=*/3000000);
 
   int moveNum = 0;
   while (!ai.gameIsOver()) {

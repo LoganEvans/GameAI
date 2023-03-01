@@ -1,6 +1,7 @@
 #include "ais/connect4AI.h"
 
 #include <random>
+#include <thread>
 
 namespace ais::conn4 {
 
@@ -230,9 +231,12 @@ State::State(State* parent, Board board, Board::Player playerToMove)
 }
 
 Board::Spot State::pickMove() const {
+  if (board().hasWinningMove(playerToMove())) {
+    printf("Picking wining move\n");
+    return board().getWinningMove(playerToMove());
+  }
+
   auto legalMoves = board_.legalMoves();
-  double totalProb = 0.0;
-  std::array<double, 7> winningProbs({});
 
   double maxProb = 0.0;
   int bestCol = 0;
@@ -276,6 +280,10 @@ double State::winProbability(Board::Player player) const {
 }
 
 void State::updateProbabilities(Board::Player trialWinner) {
+  if (trialWinner != Board::Player::One && trialWinner != Board::Player::Two) {
+    trialWinner = Board::other(playerToMove_);
+  }
+
   auto* state = this;
   while (state) {
     state->winProb_.recordTrial(trialWinner);
@@ -306,9 +314,10 @@ void State::markSolved(Board::Player winningPlayer) {
 }
 
 void State::createChildren() {
-  printf("createChildren() -- %lf... ", winProbability(playerToMove()));
   std::lock_guard lock(childrenMutex_);
-  assert(!hasChildren_);
+  if (hasChildren_) {
+    return;
+  }
   assert(!board().hasWinningMove(playerToMove()));
 
   if (children_[0]) {
@@ -335,7 +344,6 @@ void State::createChildren() {
   }
 
   hasChildren_ = true;
-  printf("... %lf\n", winProbability(playerToMove()));
 }
 
 void State::monteCarloTrial() {
@@ -347,13 +355,22 @@ void State::monteCarloTrial() {
   Board::Player otherPlayer = Board::other(player);
 
   if (b.hasWinningMove(player)) {
-    b.move(b.getWinningMove(player), player);
+    updateProbabilities(player); // XXX markSolved
+    return;
   }
 
-  while (b.winner() == Board::Player::None) {
-    auto legal = b.legalMoves();
+  std::vector<Board::Spot> potentialMoves;
+  potentialMoves.reserve(Board::kCols);
 
-    int potentialMoves = 0;
+  while (b.winner() == Board::Player::None) {
+    if (b.hasWinningMove(player)) {
+      b.move(b.getWinningMove(player), player);
+      break;
+    }
+
+    auto legal = b.legalMoves();
+    potentialMoves.clear();
+
     for (int col = 0; col < Board::kCols; col++) {
       int row = legal.legalRowInCol[col];
       if (row == Board::LegalMoves::kIllegal) {
@@ -361,42 +378,21 @@ void State::monteCarloTrial() {
       }
 
       Board lookAhead(b);
-      lookAhead.move(Board::Spot{.row = row, .col = col}, player);
-      if (lookAhead.hasWinningMove(otherPlayer)) {
-        continue;
+      Board::Spot spot{.row = row, .col = col};
+      lookAhead.move(spot, player);
+      if (!lookAhead.hasWinningMove(otherPlayer)) {
+        potentialMoves.push_back(spot);
       }
-
-      potentialMoves++;
     }
 
-    if (potentialMoves == 0) {
-      for (int col = 0; col < Board::kCols; col++) {
-        int row = legal.legalRowInCol[col];
-        if (row != Board::LegalMoves::kIllegal) {
-          b.move(Board::Spot{.row = row, .col = col}, player);
-          std::swap(player, otherPlayer);
-          break;
-        }
-      }
-      break;
+    if (potentialMoves.empty()) {
+      updateProbabilities(/*trialWinner=*/otherPlayer);
+      return;
     }
 
-    std::uniform_int_distribution<> selectionDist(0, potentialMoves);
-    int move = selectionDist(gen);
-
-    for (int col = 0; col < Board::kCols; col++) {
-      int row = legal.legalRowInCol[col];
-      if (row == Board::LegalMoves::kIllegal) {
-        continue;
-      }
-
-      if (move == 0) {
-        b.move(Board::Spot{.row = row, .col = col}, player);
-        std::swap(player, otherPlayer);
-        break;
-      }
-      move--;
-    }
+    std::uniform_int_distribution<> selectionDist(0, potentialMoves.size() - 1);
+    b.move(potentialMoves[selectionDist(gen)], player);
+    std::swap(player, otherPlayer);
   }
 
   updateProbabilities(b.winner());
@@ -433,10 +429,6 @@ void AI::thinkHard() {
         assert(numTrials != State::kCertain);
         if (numTrials >= kMonteCarloThreshold) {
           state->createChildren();
-        } else if (b.hasWinningMove(playerToMove)) {
-          //state->markSolved(playerToMove);
-          state->updateProbabilities(playerToMove); // XXX
-          break;
         } else {
           state->monteCarloTrial();
           break;
@@ -490,7 +482,13 @@ bool AI::gameIsOver() const {
 }
 
 std::unique_ptr<game::Connect4::Move> AI::waitForMove() {
-  thinkHard();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < std::thread::hardware_concurrency(); i++) {
+    threads.push_back(std::thread([&]() { thinkHard(); }));
+  }
+  for (int i = 0; i < threads.size(); i++) {
+    threads[i].join();
+  }
 
   auto spot = state_->pickMove();
   state_ = state_->makeMoveAndUpdateState(spot);
