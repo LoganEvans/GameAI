@@ -399,7 +399,6 @@ void State::monteCarloTrial() {
 }
 
 void AI::thinkHard() {
-  printf("> thinkHard()\n");
   std::random_device rd;
   std::mt19937 gen(rd());
 
@@ -472,9 +471,6 @@ void AI::thinkHard() {
       }
     }
   }
-  printf("< thinkHard() -- iters: %d... %d, winProb: %lf\n", iters,
-         Clock::now() < deadline,
-         state_->winProbability(state_->playerToMove()));
 }
 
 bool AI::gameIsOver() const {
