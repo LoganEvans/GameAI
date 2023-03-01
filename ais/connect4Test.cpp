@@ -267,7 +267,7 @@ TEST(Board, hasWinningMoveForwardDiag) {
           "       \n"
           "  XO   \n"
           " XOO   \n"
-          "XOOO   \n");
+          "XOXX   \n");
   EXPECT_TRUE(b.hasWinningMove(Board::Player::One));
   auto spot = Board::Spot{.row = 3, .col = 3};
   EXPECT_EQ(b.getWinningMove(Board::Player::One), spot);
@@ -277,7 +277,7 @@ TEST(Board, hasWinningMoveForwardDiag) {
             "   O   \n"
             "  OX   \n"
             " OXX   \n"
-            " XXX   \n");
+            " XOX   \n");
   EXPECT_TRUE(b.hasWinningMove(Board::Player::Two));
   spot = Board::Spot{.row = 0, .col = 0};
   EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
@@ -289,7 +289,7 @@ TEST(Board, hasWinningMoveBackwardDiag) {
           "       \n"
           "   OX  \n"
           "   OOX \n"
-          "   OOOX\n");
+          "   XXOX\n");
   EXPECT_TRUE(b.hasWinningMove(Board::Player::One));
   auto spot = Board::Spot{.row = 3, .col = 3};
   EXPECT_EQ(b.getWinningMove(Board::Player::One), spot);
@@ -299,18 +299,10 @@ TEST(Board, hasWinningMoveBackwardDiag) {
             "   O   \n"
             "   XO  \n"
             "   XXO \n"
-            "   XXX \n");
+            "   OXX \n");
   EXPECT_TRUE(b.hasWinningMove(Board::Player::Two));
   spot = Board::Spot{.row = 0, .col = 6};
   EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
-}
-
-TEST(State, foo) {
-  Board b;
-  b.board_ = 
-  {134217728, 0}
-  ;
-  printf("%s\n", b.debugString().c_str());
 }
 
 TEST(State, monteCarlo) {
@@ -322,6 +314,14 @@ TEST(State, monteCarlo) {
 
   EXPECT_GT(state.winProbability(Board::Player::One), 0.0455);
   EXPECT_LT(state.winProbability(Board::Player::One), 0.9545);
+}
+
+TEST(Board, foo) {
+  Board b;
+  b.board_ = 
+  {4398063302171, 284786430052644}
+  ;
+  printf("%s\n", b.debugString().c_str());
 }
 
 } // namespace ais::conn4

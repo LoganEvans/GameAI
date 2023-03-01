@@ -83,12 +83,23 @@ inline bool operator!=(const Board::Spot &lhs, const Board::Spot &rhs) {
 
 class State {
 public:
-  static constexpr uint64_t kCertain = std::numeric_limits<uint64_t>::max();
+  class WinProb {
+  public:
+    double prob(Board::Player playerToMove) const;
+    void recordTrial(Board::Player winner);
+    void markSolved(Board::Player winner);
+    uint32_t numTrials() const;
+
+  private:
+    // Storing two uint32_t values together allows the value to be incremented
+    // atomically without a mutex. The format is (#playerTwoWins << 32) | #trials
+    std::atomic<uint64_t> heuristic_{(1ULL << 32) | 2};
+  };
+
+  static constexpr uint64_t kCertain = std::numeric_limits<uint32_t>::max();
 
   State() = delete;
-  State(Board board, Board::Player playerToMove)
-      : board_(board), playerToMove_(playerToMove),
-        legalMoves_(board_.legalMoves()) {}
+  State(State* parent, Board board, Board::Player playerToMove);
 
   Board::Spot pickMove() const;
   std::unique_ptr<State> makeMoveAndUpdateState(Board::Spot spot);
@@ -99,15 +110,13 @@ public:
 
   bool hasChildren() const { return hasChildren_; }
 
-  int heuristicNumTrials() const {
-    return heuristicNumTrials_.load(std::memory_order_relaxed);
-  }
-
   double winProbability(Board::Player player) const;
 
-  void setWinProbability(Board::Player winner, double probablity);
+  const WinProb &winProb() const { return winProb_; }
 
-  void updateProbabilities();
+  const Board::LegalMoves& legalMoves() const { return legalMoves_; }
+
+  void updateProbabilities(Board::Player trialWinner);
 
   void markSolved(Board::Player winningPlayer);
 
@@ -118,18 +127,13 @@ public:
   void monteCarloTrial();
 
 private:
+  State* parent_{nullptr};
   Board board_;
   Board::Player playerToMove_;
-
-  // Start at 1 win per player based on the sunrise problem
-  std::atomic<uint64_t> heuristicSum_{1};
-  std::atomic<uint64_t> heuristicNumTrials_{2};
-
+  WinProb winProb_{};
   Board::LegalMoves legalMoves_;
-  State* parent_{nullptr};
   bool hasChildren_{false};
   std::mutex childrenMutex_;
-  std::atomic<double> minMaxWinProb_{0.5};
   std::array<std::unique_ptr<State>, Board::kCols> children_;
 };
 
@@ -141,7 +145,8 @@ class AI {
        : aiPlayer_(static_cast<Board::Player>(aiPlayer)),
          serverPlayer_(static_cast<Board::Player>((aiPlayer + 1) % 2)),
          durationPerMove_(std::chrono::microseconds(usecPerMove)),
-         state_(std::make_unique<State>(Board(), Board::Player::One)) {}
+         state_(std::make_unique<State>(/*parent=*/nullptr, Board(),
+                                        Board::Player::One)) {}
 
    void thinkHard();
 

@@ -23,6 +23,7 @@ Board::Board(std::string str) {
     }
     col++;
   } while (row != 0 || col != kCols);
+  assert(boardIsLegal());
 }
 
 std::string Board::debugString() const {
@@ -59,7 +60,6 @@ Board::Player Board::getPlayer(Spot spot) const {
 
 void Board::move(Spot spot, Player value) {
   board_[bIdx(value)] |= (1ULL << spot.row) << (8 * spot.col);
-  //assert(boardIsLegal());
 }
 
 Board::Player Board::winner() const {
@@ -178,22 +178,55 @@ bool Board::boardIsLegal() const {
   int movesTwo = __builtin_popcountll(board_[1]);
 
   if (movesOne != movesTwo && movesOne != movesTwo + 1) {
-    //assert(false);
     return false;
   }
 
   uint64_t merged = board_[0] | board_[1];
   if (((merged + 0x1010101010101ULL) & merged) != 0) {
-    //assert(false);
     return false;
   }
 
   if (merged & ~0x3f3f3f3f3f3f3fULL) {
-    //assert(false);
     return false;
   }
 
   return true;
+}
+
+double State::WinProb::prob(Board::Player playerToMove) const {
+  uint64_t heuristic = heuristic_.load(std::memory_order_relaxed);
+  double p =
+      static_cast<double>(heuristic >> 32) / static_cast<uint32_t>(heuristic);
+  return (playerToMove == Board::Player::One) ? 1.0 - p : p;
+}
+
+void State::WinProb::recordTrial(Board::Player winner) {
+  uint64_t increment = 1;
+  if (winner == Board::Player::Two) {
+    increment += 1ULL << 32;
+  }
+  uint64_t prev = heuristic_.fetch_add(increment, std::memory_order_relaxed);
+  assert(static_cast<uint32_t>(prev) != kCertain);
+}
+
+void State::WinProb::markSolved(Board::Player winner) {
+  uint64_t v = kCertain;
+  if (winner == Board::Player::Two) {
+    v |= kCertain << 32;
+  }
+  heuristic_.store(v, std::memory_order_relaxed);
+}
+
+uint32_t State::WinProb::numTrials() const {
+  return static_cast<uint32_t>(heuristic_.load(std::memory_order_relaxed));
+}
+
+State::State(State* parent, Board board, Board::Player playerToMove)
+    : parent_(parent), board_(board), playerToMove_(playerToMove),
+      legalMoves_(board_.legalMoves()) {
+  if (board_.hasWinningMove(playerToMove)) {
+    markSolved(playerToMove);
+  }
 }
 
 Board::Spot State::pickMove() const {
@@ -229,7 +262,8 @@ std::unique_ptr<State> State::makeMoveAndUpdateState(Board::Spot spot) {
   auto state = std::move(children_[spot.col]);
   if (!state) {
     board_.move(spot, playerToMove_);
-    state = std::make_unique<State>(board_, Board::other(playerToMove_));
+    state = std::make_unique<State>(/*parent=*/nullptr, board_,
+                                    Board::other(playerToMove_));
   }
 
   state->parent_ = nullptr;
@@ -238,64 +272,44 @@ std::unique_ptr<State> State::makeMoveAndUpdateState(Board::Spot spot) {
 }
 
 double State::winProbability(Board::Player player) const {
-  if (hasChildren()) {
-    auto p = minMaxWinProb_.load(std::memory_order_relaxed);
-    return (player == Board::Player::One) ? 1.0 - p : p;
-  }
-
-  uint64_t numTrials =
-      heuristicNumTrials_.load(std::memory_order_relaxed);
-  uint64_t sum = heuristicSum_.load(std::memory_order_relaxed);
-  double n = (playerToMove_ == Board::Player::One) ? numTrials - sum : sum;
-  return n / heuristicNumTrials_;
+  return winProb_.prob(player);
 }
 
-void State::setWinProbability(Board::Player winner, double probability) {
-  minMaxWinProb_.store((winner == Board::Player::One) ? 1.0 - probability
-                                                      : probability,
-                       std::memory_order_relaxed);
-}
-
-void State::updateProbabilities() {
-  double prob = 0.0;
-  if (hasChildren()) {
-    for (int col = 0; col < Board::kCols; col++) {
-      if (children_[col]) {
-        prob = std::max(prob, children_[col]->winProbability(playerToMove()));
-      }
-    }
-    setWinProbability(playerToMove(), prob);
-  } else {
-    setWinProbability(playerToMove(), winProbability(playerToMove()));
-  }
-
-  auto* parent = parent_;
-  while (parent) {
-    auto minProb = 1.0;
-    for (const auto& child: parent->children_) {
-      if (!child) {
-        continue;
-      }
-      minProb = std::min(minProb, child->winProbability(child->playerToMove()));
-    }
-
-    auto maxProb = 1.0 - minProb;
-    if (maxProb == parent->winProbability(parent->playerToMove())) {
-      break;
-    }
-
-    parent->setWinProbability(parent->playerToMove(), maxProb);
+void State::updateProbabilities(Board::Player trialWinner) {
+  auto* state = this;
+  while (state) {
+    state->winProb_.recordTrial(trialWinner);
+    state = state->parent_;
   }
 }
 
 void State::markSolved(Board::Player winningPlayer) {
-  heuristicNumTrials_.store(kCertain, std::memory_order_release);
-  heuristicSum_.store(winningPlayer == Board::Player::One ? 0 : kCertain,
-                      std::memory_order_release);
+  winProb_.markSolved(winningPlayer);
+//  auto* state = parent_;
+//  while (state) {
+//    bool isSolved = true;
+//    for (int col = 0; col < Board::kCols; col++) {
+//      int row = legalMoves_.legalRowInCol[col];
+//      if (row == Board::LegalMoves::kIllegal) {
+//        continue;
+//      }
+//      if (
+//    }
+//
+//    if (state->playerToMove() == winningPlayer) {
+//      state->
+//      state = state->parent_;
+//    } else {
+//      break;
+//    }
+//  }
 }
 
 void State::createChildren() {
+  printf("createChildren() -- %lf... ", winProbability(playerToMove()));
   std::lock_guard lock(childrenMutex_);
+  assert(!hasChildren_);
+  assert(!board().hasWinningMove(playerToMove()));
 
   if (children_[0]) {
     return;
@@ -312,13 +326,16 @@ void State::createChildren() {
     Board b(board());
     b.move(Board::Spot{.row = row, .col = col}, playerToMove_);
 
-    children_[col] =
-        std::make_unique<State>(/*board=*/b, /*playerToMove=*/otherPlayer);
-    children_[col]->parent_ = this;
+    children_[col] = std::make_unique<State>(/*parent=*/this, /*board=*/b,
+                                             /*playerToMove=*/otherPlayer);
+
+    if (b.hasWinningMove(otherPlayer)) {
+      children_[col]->markSolved(otherPlayer);
+    }
   }
 
   hasChildren_ = true;
-  updateProbabilities();
+  printf("... %lf\n", winProbability(playerToMove()));
 }
 
 void State::monteCarloTrial() {
@@ -382,14 +399,7 @@ void State::monteCarloTrial() {
     }
   }
 
-  Board::Player winner = b.winner();
-  if (winner == Board::Player::Two ||
-      (playerToMove_ == Board::Player::One && winner == Board::Player::Draw)) {
-    heuristicSum_.fetch_add(1, std::memory_order_relaxed);
-  }
-
-  heuristicNumTrials_.fetch_add(1, std::memory_order_relaxed);
-  updateProbabilities();
+  updateProbabilities(b.winner());
 }
 
 void AI::thinkHard() {
@@ -410,21 +420,23 @@ void AI::thinkHard() {
     }
 
     Board b(state->board());
-    Board::Player playerToMove = state->playerToMove();
-
     while (b.winner() == Board::Player::None) {
-      //auto wp = state->winProbability(state->playerToMove());
-      //if (wp == 0.0 || wp == 1.0) {
-      //  break;
-      //}
+      Board::Player playerToMove = state->playerToMove();
+
+      wp = state->winProbability(playerToMove);
+      if (wp == 0.0 || wp == 1.0) {
+        break;
+      }
 
       if (!state->hasChildren()) {
-        if (state->heuristicNumTrials() >= kMonteCarloThreshold) {
+        uint32_t numTrials = state->winProb().numTrials();
+        assert(numTrials != State::kCertain);
+        if (numTrials >= kMonteCarloThreshold) {
           state->createChildren();
-        } else if (b.hasWinningMove(state->playerToMove())) {
-          printf("seen\n");
-          state->setWinProbability(state->playerToMove(), 1.0);
-          state->updateProbabilities();
+        } else if (b.hasWinningMove(playerToMove)) {
+          //state->markSolved(playerToMove);
+          state->updateProbabilities(playerToMove); // XXX
+          break;
         } else {
           state->monteCarloTrial();
           break;
@@ -438,19 +450,32 @@ void AI::thinkHard() {
         if (child == nullptr) {
           winningProbs[col] = 0.0;
         } else {
-          winningProbs[col] = child->winProbability(state->playerToMove());
+          winningProbs[col] = child->winProbability(playerToMove);
           totalProb += winningProbs[col];
         }
       }
 
-      std::uniform_real_distribution<> selectionDist(0, totalProb);
-      double selector = selectionDist(gen);
-      double cumulative = 0.0;
-      for (int col = 0; col < Board::kCols - 1; col++) {
-        cumulative += winningProbs[col];
-        if (cumulative >= selector) {
+      if (totalProb == 0.0) {
+        for (int col = 0; col < Board::kCols; col++) {
+          if (state->legalMoves().legalRowInCol[col] ==
+              Board::LegalMoves::kIllegal) {
+            continue;
+          }
           state = state->getChild(col);
+          b = state->board();
           break;
+        }
+      } else {
+        std::uniform_real_distribution<> selectionDist(0, totalProb);
+        double selector = selectionDist(gen);
+        double cumulative = 0.0;
+        for (int col = 0; col < Board::kCols; col++) {
+          cumulative += winningProbs[col];
+          if (cumulative >= selector) {
+            state = state->getChild(col);
+            b = state->board();
+            break;
+          }
         }
       }
     }
