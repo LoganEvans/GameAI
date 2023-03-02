@@ -216,110 +216,21 @@ TEST(Board, nextPlayer) {
   EXPECT_EQ(b.nextPlayer(), Board::Player::Two);
 }
 
-TEST(Board, hasWinningMoveCol) {
-  Board b("       \n"
-          "       \n"
-          "       \n"
-          "       \n"
-          "XO     \n"
-          "XO     \n");
-  EXPECT_FALSE(b.hasWinningMove(Board::Player::One));
-  EXPECT_FALSE(b.hasWinningMove(Board::Player::Two));
-
-  b.move(Board::Spot{.row = 2, .col = 0}, Board::Player::One);
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::One));
-  auto spot = Board::Spot{.row = 3, .col = 0};
-  EXPECT_EQ(b.getWinningMove(Board::Player::One), spot);
-
-  b.move(Board::Spot{.row = 2, .col = 1}, Board::Player::Two);
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::Two));
-  spot = Board::Spot{.row = 3, .col = 1};
-  EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
-}
-
-TEST(Board, hasWinningMoveRow) {
-  Board b("       \n"
-          "       \n"
-          "       \n"
-          "       \n"
-          "OOO    \n"
-          "XXX    \n");
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::One));
-  auto spot = Board::Spot{.row = 0, .col = 3};
-  EXPECT_EQ(b.getWinningMove(Board::Player::One), spot);
-  EXPECT_FALSE(b.hasWinningMove(Board::Player::Two));
-
-  b = Board("       \n"
-            "       \n"
-            "       \n"
-            "       \n"
-            "    XXX\n"
-            "X   OOO\n");
-  EXPECT_FALSE(b.hasWinningMove(Board::Player::One));
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::Two));
-  spot = Board::Spot{.row = 0, .col = 3};
-  EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
-}
-
-TEST(Board, hasWinningMoveForwardDiag) {
-  Board b("       \n"
-          "       \n"
-          "       \n"
-          "  XO   \n"
-          " XOO   \n"
-          "XOXX   \n");
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::One));
-  auto spot = Board::Spot{.row = 3, .col = 3};
-  EXPECT_EQ(b.getWinningMove(Board::Player::One), spot);
-
-  b = Board("       \n"
-            "       \n"
-            "   O   \n"
-            "  OX   \n"
-            " OXX   \n"
-            " XOX   \n");
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::Two));
-  spot = Board::Spot{.row = 0, .col = 0};
-  EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
-}
-
-TEST(Board, hasWinningMoveBackwardDiag) {
-  Board b("       \n"
-          "       \n"
-          "       \n"
-          "   OX  \n"
-          "   OOX \n"
-          "   XXOX\n");
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::One));
-  auto spot = Board::Spot{.row = 3, .col = 3};
-  EXPECT_EQ(b.getWinningMove(Board::Player::One), spot);
-
-  b = Board("       \n"
-            "       \n"
-            "   O   \n"
-            "   XO  \n"
-            "   XXO \n"
-            "   OXX \n");
-  EXPECT_TRUE(b.hasWinningMove(Board::Player::Two));
-  spot = Board::Spot{.row = 0, .col = 6};
-  EXPECT_EQ(b.getWinningMove(Board::Player::Two), spot);
-}
-
 TEST(State, monteCarlo) {
-  State state(Board(), Board::Player::One);
+  State state(/*parent=*/nullptr, Board(), Board::Player::One);
 
   for (int i = 0; i < 2000; i++) {
     state.monteCarloTrial();
   }
 
-  EXPECT_GT(state.winProbability(Board::Player::One), 0.0455);
-  EXPECT_LT(state.winProbability(Board::Player::One), 0.9545);
+  EXPECT_GT(state.winProb().prob(Board::Player::One), 0.0455);
+  EXPECT_LT(state.winProb().prob(Board::Player::One), 0.9545);
 }
 
 TEST(Board, foo) {
   Board b;
   b.board_ = 
-  {4398063302171, 284786430052644}
+  {4378853632, 1099679399936}
   ;
   printf("%s\n", b.debugString().c_str());
 }

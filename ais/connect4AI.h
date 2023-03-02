@@ -20,6 +20,7 @@ public:
     int32_t row{0};
     int32_t col{0};
   };
+  static constexpr Spot kIllegalSpot{.row = -1, .col = -1};
 
   enum class Player {
     One = 0,
@@ -34,7 +35,7 @@ public:
   };
 
   Board() {}
-  Board(std::string str);  // For debug use
+  Board(std::string str); // For debug use
   Board(const Board &other) : board_(other.board_) {}
 
   std::string debugString() const;
@@ -45,9 +46,7 @@ public:
   }
 
   // Board Index
-  static inline int bIdx(Player player) {
-    return static_cast<int>(player);
-  }
+  static inline int bIdx(Player player) { return static_cast<int>(player); }
 
   static inline Player other(Player player) {
     return (player == Player::One) ? Player::Two : Player::One;
@@ -61,8 +60,6 @@ public:
 
   LegalMoves legalMoves() const;
 
-  bool hasWinningMove(Player player) const;
-
   Spot getWinningMove(Player player) const;
 
   Player nextPlayer() const;
@@ -70,6 +67,7 @@ public:
   bool boardIsLegal() const;
 
   std::array<uint64_t, 2> board_{};
+
 private:
 };
 
@@ -85,40 +83,41 @@ class State {
 public:
   class WinProb {
   public:
+    static constexpr uint64_t kCertain = std::numeric_limits<uint32_t>::max();
+
     double prob(Board::Player playerToMove) const;
     void recordTrial(Board::Player winner);
     void markSolved(Board::Player winner);
+    Board::Player solvedWinnerImpl(uint64_t heuristic) const;
+    Board::Player solvedWinner() const;
     uint32_t numTrials() const;
 
   private:
     // Storing two uint32_t values together allows the value to be incremented
-    // atomically without a mutex. The format is (#playerTwoWins << 32) | #trials
+    // atomically without a mutex. The format is (#playerTwoWins << 32) |
+    // #trials
     std::atomic<uint64_t> heuristic_{(1ULL << 32) | 2};
   };
 
-  static constexpr uint64_t kCertain = std::numeric_limits<uint32_t>::max();
-
   State() = delete;
-  State(State* parent, Board board, Board::Player playerToMove);
+  State(State *parent, Board board, Board::Player playerToMove);
 
   Board::Spot pickMove() const;
   std::unique_ptr<State> makeMoveAndUpdateState(Board::Spot spot);
 
-  const Board& board() const { return board_; }
+  const Board &board() const { return board_; }
 
   Board::Player playerToMove() const { return playerToMove_; }
 
   bool hasChildren() const { return hasChildren_; }
 
-  double winProbability(Board::Player player) const;
-
   const WinProb &winProb() const { return winProb_; }
 
-  const Board::LegalMoves& legalMoves() const { return legalMoves_; }
+  const Board::LegalMoves &legalMoves() const { return legalMoves_; }
 
   void updateProbabilities(Board::Player trialWinner);
 
-  void markSolved(Board::Player winningPlayer);
+  void markSolvedState(Board::Player winningPlayer);
 
   void createChildren();
 
@@ -127,7 +126,7 @@ public:
   void monteCarloTrial();
 
 private:
-  State* parent_{nullptr};
+  State *parent_{nullptr};
   Board board_;
   Board::Player playerToMove_;
   WinProb winProb_{};
@@ -138,25 +137,25 @@ private:
 };
 
 class AI {
- public:
-   typedef std::chrono::high_resolution_clock Clock;
+public:
+  typedef std::chrono::high_resolution_clock Clock;
 
-   AI(int aiPlayer, int usecPerMove)
-       : aiPlayer_(static_cast<Board::Player>(aiPlayer)),
-         serverPlayer_(static_cast<Board::Player>((aiPlayer + 1) % 2)),
-         durationPerMove_(std::chrono::microseconds(usecPerMove)),
-         state_(std::make_unique<State>(/*parent=*/nullptr, Board(),
-                                        Board::Player::One)) {}
+  AI(int aiPlayer, int usecPerMove)
+      : aiPlayer_(static_cast<Board::Player>(aiPlayer)),
+        serverPlayer_(static_cast<Board::Player>((aiPlayer + 1) % 2)),
+        durationPerMove_(std::chrono::microseconds(usecPerMove)),
+        state_(std::make_unique<State>(/*parent=*/nullptr, Board(),
+                                       Board::Player::One)) {}
 
-   void thinkHard();
+  void thinkHard();
 
-   bool gameIsOver() const;
+  bool gameIsOver() const;
 
-   std::unique_ptr<game::Connect4::Move> waitForMove();
+  std::unique_ptr<game::Connect4::Move> waitForMove();
 
-   void makeServerMove(const game::Connect4::Move& move);
+  void makeServerMove(const game::Connect4::Move &move);
 
- private:
+private:
   static constexpr uint64_t kMonteCarloThreshold = 1000;
 
   const Board::Player aiPlayer_;
