@@ -61,8 +61,8 @@ int main() {
   auto stub = game::Connect4Service::NewStub(grpc::CreateChannel(
       "localhost:50051", grpc::InsecureChannelCredentials()));
 
-  const int aiPlayer = 1;
-  const int serverPlayer = 0;
+  const int aiPlayer = 0;
+  const int serverPlayer = 1;
 
   auto game =
       newGame(stub.get(), /*serverPlayer=*/serverPlayer, /*difficulty=*/5);

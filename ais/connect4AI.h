@@ -81,9 +81,18 @@ inline bool operator!=(const Board::Spot &lhs, const Board::Spot &rhs) {
 
 class State {
 public:
+  static constexpr uint64_t kMonteCarloBootstrap = 100;
+  static constexpr uint64_t kMonteCarloSplitState = 1000;
+
   class WinProb {
   public:
     static constexpr uint64_t kCertain = std::numeric_limits<uint32_t>::max();
+
+    WinProb &operator=(const WinProb &other) {
+      heuristic_.store(other.heuristic_.load(std::memory_order_acquire),
+                       std::memory_order_release);
+      return *this;
+    }
 
     double prob(Board::Player playerToMove) const;
     void recordTrial(Board::Player winner);
@@ -115,7 +124,9 @@ public:
 
   const Board::LegalMoves &legalMoves() const { return legalMoves_; }
 
-  void updateProbabilities(Board::Player trialWinner);
+  void recordMonteCarloResult(Board::Player trialWinner);
+
+  void updateProbabilities();
 
   void markSolvedState(Board::Player winningPlayer);
 
@@ -123,7 +134,9 @@ public:
 
   State *getChild(int col) const { return children_[col].get(); }
 
-  void monteCarloTrial();
+  Board::Player monteCarloTrial() const;
+
+  int height() const;
 
 private:
   State *parent_{nullptr};
@@ -147,7 +160,7 @@ public:
         state_(std::make_unique<State>(/*parent=*/nullptr, Board(),
                                        Board::Player::One)) {}
 
-  void thinkHard();
+  static void thinkHard(State *root, AI::Clock::duration durationPerMove);
 
   bool gameIsOver() const;
 
@@ -156,8 +169,6 @@ public:
   void makeServerMove(const game::Connect4::Move &move);
 
 private:
-  static constexpr uint64_t kMonteCarloThreshold = 1000;
-
   const Board::Player aiPlayer_;
   const Board::Player serverPlayer_;
   const Clock::duration durationPerMove_;

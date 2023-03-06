@@ -227,12 +227,4 @@ TEST(State, monteCarlo) {
   EXPECT_LT(state.winProb().prob(Board::Player::One), 0.9545);
 }
 
-TEST(Board, foo) {
-  Board b;
-  b.board_ = 
-  {4378853632, 1099679399936}
-  ;
-  printf("%s\n", b.debugString().c_str());
-}
-
 } // namespace ais::conn4

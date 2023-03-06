@@ -235,14 +235,36 @@ std::unique_ptr<State> State::makeMoveAndUpdateState(Board::Spot spot) {
   return state;
 }
 
-void State::updateProbabilities(Board::Player trialWinner) {
+void State::recordMonteCarloResult(Board::Player trialWinner) {
   if (trialWinner != Board::Player::One && trialWinner != Board::Player::Two) {
     trialWinner = Board::other(playerToMove_);
   }
+  winProb_.recordTrial(trialWinner);
+}
 
+void State::updateProbabilities() {
   auto *state = this;
   while (state) {
-    state->winProb_.recordTrial(trialWinner);
+    if (!state->hasChildren()) {
+      state = state->parent_;
+      continue;
+    }
+
+    auto player = state->playerToMove();
+    int maxIdx = -1;
+    double maxProb = -1.0;
+    for (int i = 0; i < state->children_.size(); i++) {
+      const auto& child = state->children_[i];
+      if (!child) {
+        continue;
+      }
+      auto p = child->winProb().prob(player);
+      if (p > maxProb) {
+        maxIdx = i;
+        maxProb = p;
+      }
+    }
+    state->winProb_ = state->children_[maxIdx]->winProb();
     state = state->parent_;
   }
 }
@@ -287,12 +309,13 @@ Board::Player State::WinProb::solvedWinner() const {
 }
 
 void State::createChildren() {
-  std::lock_guard lock(childrenMutex_);
-  if (hasChildren_) {
+  std::unique_lock<std::mutex> lock(childrenMutex_, std::try_to_lock);
+
+  if (!lock.owns_lock()) {
     return;
   }
 
-  if (children_[0]) {
+  if (hasChildren_) {
     return;
   }
 
@@ -307,21 +330,22 @@ void State::createChildren() {
     Board b(board());
     b.move(Board::Spot{.row = row, .col = col}, playerToMove_);
 
-    children_[col] = std::make_unique<State>(/*parent=*/this, /*board=*/b,
-                                             /*playerToMove=*/otherPlayer);
+    auto s = std::make_unique<State>(/*parent=*/this, /*board=*/b,
+                                     /*playerToMove=*/otherPlayer);
+    for (int i = 0; i < kMonteCarloBootstrap; i++) {
+      auto trialWinner = s->monteCarloTrial();
+      s->recordMonteCarloResult(trialWinner);
+    }
+    children_[col] = std::move(s);
   }
 
   hasChildren_ = true;
   assert(winProb().solvedWinner() == Board::Player::None);
 
-  for (auto& child : children_) {
-    if (child && child->winProb().solvedWinner() != Board::Player::None) {
-      child->markSolvedState(child->playerToMove());
-    }
-  }
+  updateProbabilities();
 }
 
-void State::monteCarloTrial() {
+Board::Player State::monteCarloTrial() const {
   thread_local std::random_device rd;
   thread_local std::mt19937 gen(rd());
 
@@ -332,15 +356,15 @@ void State::monteCarloTrial() {
   std::vector<Board::Spot> potentialMoves;
   potentialMoves.reserve(Board::kCols);
 
+  int iters = 0;
   while (b.winner() == Board::Player::None) {
     auto winningMove = b.getWinningMove(player);
     if (winningMove != Board::kIllegalSpot) {
-      b.move(winningMove, player);
-      break;
+      return player;
     }
 
-    auto legal = b.legalMoves();
     potentialMoves.clear();
+    auto legal = b.legalMoves();
 
     for (int col = 0; col < Board::kCols; col++) {
       int row = legal.legalRowInCol[col];
@@ -358,28 +382,40 @@ void State::monteCarloTrial() {
     }
 
     if (potentialMoves.empty()) {
-      updateProbabilities(/*trialWinner=*/otherPlayer);
-      return;
+      return otherPlayer;
     }
 
     std::uniform_int_distribution<> selectionDist(0, potentialMoves.size() - 1);
-    b.move(potentialMoves[selectionDist(gen)], player);
+    iters++;
+    int selection = selectionDist(gen);
+    b.move(potentialMoves[selection], player);
     std::swap(player, otherPlayer);
   }
 
-  updateProbabilities(b.winner());
+  return b.winner();
 }
 
-void AI::thinkHard() {
+int State::height() const {
+  int h = 1;
+  const State* state = this;
+  while (state) {
+    state = state->parent_;
+    h++;
+  }
+  return h;
+}
+
+/*static*/
+void AI::thinkHard(State *root, Clock::duration durationPerMove) {
   std::random_device rd;
   std::mt19937 gen(rd());
 
-  auto deadline = Clock::now() + durationPerMove_;
+  auto deadline = Clock::now() + durationPerMove;
 
   int iters = 0;
   while (Clock::now() < deadline) {
     iters++;
-    State *state = state_.get();
+    State *state = root;
 
     auto wp = state->winProb().prob(state->playerToMove());
     if (wp == 0.0 || wp == 1.0) {
@@ -399,10 +435,13 @@ void AI::thinkHard() {
         uint32_t numTrials = state->winProb().numTrials();
         if (numTrials == State::WinProb::kCertain) {
           break;
-        } else if (numTrials >= kMonteCarloThreshold) {
+        } else if (numTrials >= State::kMonteCarloSplitState) {
           state->createChildren();
+          break;
         } else {
-          state->monteCarloTrial();
+          auto trialWinner = state->monteCarloTrial();
+          state->recordMonteCarloResult(trialWinner);
+          state->updateProbabilities();
           break;
         }
       }
@@ -453,7 +492,8 @@ bool AI::gameIsOver() const {
 std::unique_ptr<game::Connect4::Move> AI::waitForMove() {
   std::vector<std::thread> threads;
   for (int i = 0; i < std::thread::hardware_concurrency(); i++) {
-    threads.push_back(std::thread([&]() { thinkHard(); }));
+    threads.push_back(std::thread(
+        [&]() { AI::thinkHard(state_.get(), durationPerMove_); }));
   }
   for (int i = 0; i < threads.size(); i++) {
     threads[i].join();
